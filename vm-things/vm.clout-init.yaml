@@ -1,6 +1,6 @@
 packages:
-  - mosquitto
-  - mosquitto-clients
+  - mongodb
+  - openjdk-11-jdk
 
 package_update: true
 package_upgrade: true
