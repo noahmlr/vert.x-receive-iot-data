@@ -50,11 +50,12 @@ public class MainVerticle extends AbstractVerticle {
     Router router = Router.router(vertx);
 
     ServiceDiscoveryRestEndpoint.create(router, this.serviceDiscovery);
+    String token = Optional.ofNullable(System.getProperty("GATEWAY_TOKEN")).orElse("smart.home");
 
     router.post("/register")
       .handler(ctx -> {
         boolean auth = Optional.ofNullable(ctx.request().getHeader("smart.token"))
-          .map(value -> value.equals("smart.home"))
+          .map(value -> value.equals(token))
           .orElse(false);
 
         ctx.response().putHeader("Content-Type", "application/json");
