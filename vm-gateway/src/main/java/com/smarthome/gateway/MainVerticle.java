@@ -1,19 +1,13 @@
 package com.smarthome.gateway;
 
 import discovery.DiscoveryManager;
-import http.DevicesHealth;
-import http.Registration;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
 import io.vertx.core.http.HttpServer;
-import io.vertx.core.http.HttpServerOptions;
-import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.JsonObject;
-import io.vertx.core.net.PemKeyCertOptions;
-import io.vertx.ext.web.Route;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.client.WebClient;
-import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.servicediscovery.Record;
 import io.vertx.servicediscovery.ServiceDiscovery;
 import io.vertx.servicediscovery.ServiceReference;
@@ -60,64 +54,27 @@ public class MainVerticle extends AbstractVerticle {
 
         ctx.response().putHeader("Content-Type", "application/json");
         if (!auth) {
-          ctx.response().setStatusCode(403)
-            .end(new JsonObject().put("message", "Authentication Failed").toString());
+          ctx.response().setStatusCode(403).end(message("Authentication Failed").toString());
         }
 
         JsonObject requestBody = ctx.getBodyAsJson();
-        JsonObject requestMetaData = copyMetadata(requestBody);
-        String name = requestBody.getString("category");
-        Record httpRecord = HttpEndpoint.createRecord(
-          name,
-          requestBody.getString("host"),
-          requestBody.getInteger("port"),
-          "/",
-          requestMetaData);
-        logger.info("Request Body => {}, Request Metadata => {}", requestBody, requestMetaData);
-        serviceDiscovery.getRecord(new JsonObject().put("name", name), ar -> {
-          if (ar.succeeded()) {
-            Record result = ar.result();
-            if (result == null) {
-              serviceDiscovery.publish(httpRecord, par -> {
-                if (par.succeeded()) {
-                  ctx.response().setStatusCode(200).end(new JsonObject().put("message", "Successfully registered device").toString());
-                } else {
-                  logger.error("Failed to register device", ar.cause());
-                  ctx.response().setStatusCode(500).end(new JsonObject().put("message", "Internal Server Error").toString());
-                }
-              });
-            } else {
-              ctx.response().setStatusCode(400).end(new JsonObject().put("message", String.format("Device already registered with name %s", name)).toString());
-            }
-          } else {
-            logger.error("Failed to register device", ar.cause());
-            ctx.response().setStatusCode(500).end(new JsonObject().put("message", "Internal Server Error").toString());
-          }
-        });
+        Record httpRecord = createHttpRecord(requestBody);
+
+        logger.info("Request Body => {}", requestBody);
+        serviceDiscovery.getRecord(new JsonObject().put("name", httpRecord.getName()))
+          .onSuccess(record -> publishDevice(record, httpRecord, ctx))
+          .onFailure(handler -> {
+            logger.error("Failed to register device", handler.getCause());
+            ctx.response().setStatusCode(500).end(message("Internal Server Error").toString());
+          });
       });
 
-    vertx.setPeriodic(5000, id -> {
-      mqttManager.startAndConnectMqttClient(vertx)
-        .onSuccess(mqttConnect ->
-          serviceDiscovery.getRecords(new JsonObject().put("type", "http-endpoint"))
-            .onSuccess(handler -> {
-              List<ServiceReference> serviceReferences = handler.stream().map(serviceDiscovery::getReference).collect(Collectors.toList());
-              serviceReferences.forEach(reference -> {
-                WebClient client = reference.getAs(WebClient.class);
-                client.get("/").send()
-                  .onSuccess(responseHandler -> {
-                    JsonObject request = responseHandler.bodyAsJsonObject();
-                    logger.info("Device data {} - {}", reference.record().getName(), request.toString());
-                    mqttManager.publish(request)
-                      .onSuccess(i -> logger.info("Published device data {}", i));
-                  })
-                  .onFailure(throwable -> logger.error("Could not invoke device service", throwable))
-                  .onComplete(ar -> reference.release());
-              });
-            })
-            .onFailure(throwable -> logger.error("Failed to read records", throwable)))
-        .onFailure(throwable -> logger.error("Failed to connect to MQTT via Circuit Breaker", throwable));
-    });
+    vertx.setPeriodic(5000, id -> mqttManager.startAndConnectMqttClient(vertx)
+      .onSuccess(mqttConnect ->
+        serviceDiscovery.getRecords(new JsonObject().put("type", "http-endpoint"))
+          .onSuccess(this::publishDeviceData)
+          .onFailure(throwable -> logger.error("Failed to read records", throwable)))
+      .onFailure(throwable -> logger.error("Failed to connect to MQTT via Circuit Breaker", throwable)));
 
     server.requestHandler(router).listen(9090);
   }
@@ -125,8 +82,53 @@ public class MainVerticle extends AbstractVerticle {
   private JsonObject copyMetadata(JsonObject original) {
     return original
       .stream()
-      .filter(entry -> !Set.of("category", "host", "port").contains(entry.getKey()))
+      .filter(entry -> !Set.of("id", "host", "port").contains(entry.getKey()))
       .collect(Collector.of(JsonObject::new, (object, entry) -> object.put(entry.getKey(), entry.getValue()), JsonObject::mergeIn));
+  }
+
+  private JsonObject message(String message) {
+    return new JsonObject().put("message", message);
+  }
+
+  private void publishDevice(Record record, Record newRecord, RoutingContext context) {
+    if (record == null) {
+      serviceDiscovery.publish(newRecord)
+        .onSuccess(handler -> context.response().setStatusCode(200).end(new JsonObject().put("message", "Successfully registered device").toString()))
+        .onFailure(handler -> {
+          logger.error("Failed to register device", handler.getCause());
+          context.response().setStatusCode(500).end(message("Internal Server Error").toString());
+        });
+    } else {
+      context.response().setStatusCode(400).end(message(String.format("Device already registered with id %s", newRecord.getName())).toString());
+    }
+  }
+
+  private void publishDeviceData(List<Record> httpServices) {
+    List<ServiceReference> serviceReferences = httpServices.stream().map(serviceDiscovery::getReference).collect(Collectors.toList());
+    serviceReferences.forEach(reference -> {
+      WebClient client = reference.getAs(WebClient.class);
+      client.get("/").send()
+        .onSuccess(responseHandler -> {
+          JsonObject request = responseHandler.bodyAsJsonObject();
+          logger.info("Device data {} - {}", reference.record().getName(), request.toString());
+          mqttManager.publish(request)
+            .onSuccess(i -> logger.info("Published device data {}", i))
+            .onFailure(throwable -> logger.error("Failed to publish device data", throwable));
+        })
+        .onFailure(throwable -> logger.error("Could not invoke device service {}", reference.record().getName(), throwable))
+        .onComplete(ar -> reference.release());
+    });
+  }
+
+  private Record createHttpRecord(JsonObject request) {
+    JsonObject requestMetaData = copyMetadata(request);
+    String id = request.getString("id");
+    return HttpEndpoint.createRecord(
+      id,
+      request.getString("host"),
+      request.getInteger("port"),
+      Optional.ofNullable(request.getString("root")).orElse("/"),
+      requestMetaData);
   }
 
   @Override
