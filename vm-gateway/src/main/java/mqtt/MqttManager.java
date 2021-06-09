@@ -10,21 +10,21 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.mqtt.MqttClient;
 import io.vertx.mqtt.MqttClientOptions;
 import io.vertx.mqtt.messages.MqttConnAckMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
 
 public class MqttManager {
+  private static final Logger logger = LoggerFactory.getLogger(MqttManager.class);
+
   private MqttClient mqttClient;
   private CircuitBreaker breaker;
 
-  public MqttClient getMqttClient() {
-    return mqttClient;
-  }
-
-  // get a circuit breaker
   private CircuitBreaker getBreaker(Vertx vertx) {
-    if(breaker==null) {
-      breaker = CircuitBreaker.create("circuit-breaker", vertx);
+    if (breaker == null) {
+      breaker = CircuitBreaker.create("circuit-breaker", vertx,
+        new CircuitBreakerOptions().setMaxRetries(5).setTimeout(5000));
     }
     return breaker;
   }
@@ -39,12 +39,6 @@ public class MqttManager {
 
       mqttClient = MqttClient.create(vertx);
 
-      // some code executing with the breaker
-      // the code reports failures or success on the given promise.
-      // if this promise is marked as failed, the breaker increased the
-      // number of failures
-
-      // connect the mqttClient
       mqttClient.connect(mqttPort, mqttHost, ar -> {
         if (ar.succeeded()) {
           promise.complete(ar.result());

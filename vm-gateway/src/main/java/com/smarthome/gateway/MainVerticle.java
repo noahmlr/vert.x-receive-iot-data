@@ -43,9 +43,6 @@ public class MainVerticle extends AbstractVerticle {
 
   @Override
   public void start(Promise<Void> startPromise) throws Exception {
-//    mqttManager.startAndConnectMqttClient(vertx).onSuccess(ok -> {
-//      System.out.println(mqttManager.getMqttClient().clientId());
-//    });
     this.serviceDiscovery = DiscoveryManager.createDiscoveryService(vertx);
 
     HttpServer server = vertx.createHttpServer();
@@ -100,25 +97,24 @@ public class MainVerticle extends AbstractVerticle {
 
     vertx.setPeriodic(5000, id -> {
       mqttManager.startAndConnectMqttClient(vertx)
-        .onSuccess(mqttConnect -> {
+        .onSuccess(mqttConnect ->
           serviceDiscovery.getRecords(new JsonObject().put("type", "http-endpoint"))
-            .onSuccess(handler -> {
-              List<ServiceReference> serviceReferences = handler.stream().map(serviceDiscovery::getReference).collect(Collectors.toList());
-              serviceReferences.forEach(reference -> {
-                WebClient client = reference.getAs(WebClient.class);
-                client.get("/").send()
-                  .onSuccess(responseHandler -> {
-                    JsonObject request = responseHandler.bodyAsJsonObject();
-                    logger.info("Device data {} - {}", reference.record().getName(), request.toString());
-                    mqttManager.publish(request)
-                      .onSuccess(i -> logger.info("Published device data {}", i));
-                  })
-                  .onFailure(throwable -> logger.error("Could not invoke device service", throwable))
-                  .onComplete(ar -> reference.release());
-              });
-            })
-            .onFailure(throwable -> logger.error("Failed to read records", throwable));
-        });
+          .onSuccess(handler -> {
+            List<ServiceReference> serviceReferences = handler.stream().map(serviceDiscovery::getReference).collect(Collectors.toList());
+            serviceReferences.forEach(reference -> {
+              WebClient client = reference.getAs(WebClient.class);
+              client.get("/").send()
+                .onSuccess(responseHandler -> {
+                  JsonObject request = responseHandler.bodyAsJsonObject();
+                  logger.info("Device data {} - {}", reference.record().getName(), request.toString());
+                  mqttManager.publish(request)
+                    .onSuccess(i -> logger.info("Published device data {}", i));
+                })
+                .onFailure(throwable -> logger.error("Could not invoke device service", throwable))
+                .onComplete(ar -> reference.release());
+            });
+          })
+          .onFailure(throwable -> logger.error("Failed to read records", throwable))).onFailure(throwable -> logger.error("Failed to connect to MQTT", throwable));
     });
 
     server.requestHandler(router).listen(9090);
