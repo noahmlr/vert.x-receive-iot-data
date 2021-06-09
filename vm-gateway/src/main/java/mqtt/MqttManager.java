@@ -24,7 +24,7 @@ public class MqttManager {
   private CircuitBreaker getBreaker(Vertx vertx) {
     if (breaker == null) {
       breaker = CircuitBreaker.create("circuit-breaker", vertx,
-        new CircuitBreakerOptions().setMaxRetries(5).setTimeout(5000));
+        new CircuitBreakerOptions().setMaxRetries(2).setTimeout(5000));
     }
     return breaker;
   }
@@ -43,6 +43,7 @@ public class MqttManager {
         if (ar.succeeded()) {
           promise.complete(ar.result());
         } else {
+          logger.error("Failed to connect to MQTT", ar.cause());
           promise.fail(ar.cause());
         }
       });
