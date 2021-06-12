@@ -3,7 +3,6 @@ package devices;
 import communications.Http;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
-import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -25,7 +24,7 @@ public class HttpDevice implements Device, Http {
 
   private final String id;
   private final String location;
-  private static final String CATEGORY = "HTTP";
+  private static final String CATEGORY = "http";
   private final List<Sensor> sensors;
 
   private int port;

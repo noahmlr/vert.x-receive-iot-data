@@ -38,6 +38,7 @@ public class MainVerticle extends AbstractVerticle {
   @Override
   public void start(Promise<Void> startPromise) throws Exception {
     this.serviceDiscovery = DiscoveryManager.createDiscoveryService(vertx);
+    DiscoveryManager.clear(serviceDiscovery);
 
     HttpServer server = vertx.createHttpServer();
 
@@ -131,8 +132,7 @@ public class MainVerticle extends AbstractVerticle {
       requestMetaData);
   }
 
-  @Override
-  public void stop(Promise<Void> stopPromise) throws Exception {
+  private void releaseDevices() {
     this.serviceDiscovery.getRecords((JsonObject) null, ar -> {
       if (ar.succeeded()) {
         List<Record> records = ar.result();
@@ -143,7 +143,11 @@ public class MainVerticle extends AbstractVerticle {
         logger.error("Failed to release devices", ar.cause());
       }
     });
+  }
 
+  @Override
+  public void stop(Promise<Void> stopPromise) throws Exception {
+    releaseDevices();
     stopPromise.complete();
   }
 

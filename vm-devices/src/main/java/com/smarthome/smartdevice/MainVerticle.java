@@ -49,8 +49,13 @@ public class MainVerticle extends AbstractVerticle {
         .put("position", deviceLocation)
         .put("category", deviceType))
       .onSuccess(response -> {
-        logger.info("Successfully registered device to gateway");
-        httpDevice.setConnectedToGateway(true);
+        if (response.statusCode() == 200) {
+          logger.info("Successfully registered device to gateway");
+          httpDevice.setConnectedToGateway(true);
+        } else {
+          logger.info("Failed to register device to gateway - status code {}", response.statusCode());
+          httpDevice.setConnectedToGateway(false);
+        }
       })
       .onFailure(error -> {
         logger.info("Failed to register device to gateway", error);
