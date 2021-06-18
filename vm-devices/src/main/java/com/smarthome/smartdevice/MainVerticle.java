@@ -1,9 +1,13 @@
 package com.smarthome.smartdevice;
 
+import communications.Mqtt;
 import devices.HttpDevice;
+import devices.MqttDevice;
+import io.netty.handler.codec.mqtt.MqttQoS;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import org.slf4j.Logger;
@@ -28,14 +32,16 @@ public class MainVerticle extends AbstractVerticle {
 
   @Override
   public void start(Promise<Void> startPromise) throws Exception {
-    String httpPort = SystemUtil.getProperty("HTTP_PORT", "8081");
-    String deviceType = SystemUtil.getProperty("DEVICE_TYPE", "http");
-    if (!deviceType.equals("http")) {
-      throw new IllegalArgumentException("This application only supports http devices at the moment");
-    }
-    String hostName = SystemUtil.getProperty("DEVICE_HOSTNAME", "localhost");
     String deviceLocation = SystemUtil.getProperty("DEVICE_LOCATION", "bedroom");
     String id = SystemUtil.getProperty("DEVICE_ID", "AX3345");
+    String deviceType = SystemUtil.getProperty("DEVICE_TYPE", "http");
+    logger.info("Device type: {}", deviceType);
+    if (!deviceType.equals("http")) {
+      createMqttDevice(id, deviceLocation);
+      return;
+    }
+    String httpPort = SystemUtil.getProperty("HTTP_PORT", "8081");
+    String hostName = SystemUtil.getProperty("DEVICE_HOSTNAME", "localhost");
     String gatewayToken = SystemUtil.getProperty("GATEWAY_TOKEN", "smart.home");
 
     HttpDevice httpDevice = new HttpDevice(id, deviceLocation);
@@ -80,7 +86,25 @@ public class MainVerticle extends AbstractVerticle {
     httpDevice.createHttpServer(vertx, router);
 
     httpDevice.setPort(Integer.parseInt(httpPort));
+  }
 
+  private void createMqttDevice(String id, String deviceLocation) {
+    String clientId = SystemUtil.getProperty("MQTT_CLIENT_ID", "mqtt_001");
+    int port = Integer.parseInt(SystemUtil.getProperty("MQTT_PORT", "1883"));
+    String host = SystemUtil.getProperty("MQTT_HOST", "mqtt.home.smart");
+    String topic = SystemUtil.getProperty("MQTT_TOPIC", "house");
+    MqttDevice device = new MqttDevice(id, deviceLocation)
+      .setHost(host)
+      .setPort(port);
+
+    vertx.setPeriodic(5000, time -> device.startAndConnectMqttClient(vertx)
+      .onSuccess(connection -> {
+        JsonObject object = device.jsonValue();
+        device.getMqttClient().publish(topic, Buffer.buffer(object.toString()), MqttQoS.AT_LEAST_ONCE, false, false)
+          .onSuccess(i -> logger.info("Successfully published mqtt message"))
+          .onFailure(throwable -> logger.error("Failed to publish message", throwable));
+      })
+      .onFailure(throwable -> logger.error("Failed to connect to MQTT")));
   }
 
 }

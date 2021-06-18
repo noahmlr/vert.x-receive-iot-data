@@ -37,6 +37,25 @@ public class HttpDevice implements Device, Http {
     this.sensors = List.of(new TemperatureSensor(), new HumiditySensor(), new eCO2Sensor());
   }
 
+  @Override
+  public List<Sensor> getSensors() {
+    return this.sensors;
+  }
+
+  @Override
+  public String getId() {
+    return this.id;
+  }
+
+  @Override
+  public String getLocation() {
+    return location;
+  }
+
+  @Override
+  public String getCategory() {
+    return CATEGORY;
+  }
 
   @Override
   public HttpRequest<Buffer> createRegisterToGatewayRequest(Vertx vertx, String domainName, int port, boolean ssl, String token) {
@@ -62,22 +81,6 @@ public class HttpDevice implements Device, Http {
       .onSuccess(server -> logger.info("Listening to port {}", port))
       .onFailure(error -> logger.error("Could not listen to port {}", port, error));
     return this;
-  }
-
-  @Override
-  public JsonObject jsonValue() {
-    return new JsonObject()
-      .put("id", this.id)
-      .put("location", this.location)
-      .put("category", CATEGORY)
-      .put("sensors", createSensorArray());
-  }
-
-  private JsonArray createSensorArray() {
-    return this.sensors
-      .stream()
-      .map(Sensor::jsonValue)
-      .collect(JsonArray::new, JsonArray::add, JsonArray::addAll);
   }
 
   public void setConnectedToGateway(boolean connectedToGateway) {
