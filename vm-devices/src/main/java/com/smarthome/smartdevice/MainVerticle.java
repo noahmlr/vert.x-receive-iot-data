@@ -100,7 +100,7 @@ public class MainVerticle extends AbstractVerticle {
     vertx.setPeriodic(5000, time -> device.startAndConnectMqttClient(vertx)
       .onSuccess(connection -> {
         JsonObject object = device.jsonValue();
-        device.getMqttClient().publish(topic, Buffer.buffer(object.toString()), MqttQoS.AT_LEAST_ONCE, false, false)
+        device.getMqttClient().publish(topic, Buffer.buffer(object.toString()), MqttQoS.AT_MOST_ONCE, false, false)
           .onSuccess(i -> logger.info("Successfully published mqtt message"))
           .onFailure(throwable -> logger.error("Failed to publish message", throwable));
       })
