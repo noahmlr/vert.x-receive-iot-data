@@ -4,6 +4,7 @@ import io.vertx.circuitbreaker.CircuitBreaker;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.mqtt.MqttClient;
+import io.vertx.mqtt.MqttClientOptions;
 import io.vertx.mqtt.messages.MqttConnAckMessage;
 
 public interface Mqtt {
@@ -20,18 +21,18 @@ public interface Mqtt {
 
   void setMqttClient(MqttClient client);
 
-  default MqttClient createMqttClient(Vertx vertx) {
-    return MqttClient.create(vertx);
+  default MqttClient createMqttClient(Vertx vertx, MqttClientOptions options) {
+    return MqttClient.create(vertx, options);
   }
 
   default CircuitBreaker getBreaker(Vertx vertx) {
     return CircuitBreaker.create("breaker", vertx);
   }
 
-  default Future<MqttConnAckMessage> startAndConnectMqttClient(Vertx vertx) {
+  default Future<MqttConnAckMessage> startAndConnectMqttClient(Vertx vertx, MqttClientOptions options) {
     return getBreaker(vertx).execute(promise -> {
 
-      MqttClient mqttClient = createMqttClient(vertx);
+      MqttClient mqttClient = createMqttClient(vertx, options);
       setMqttClient(mqttClient);
 
       getMqttClient().connect(getPort(), getHost(), ar -> {

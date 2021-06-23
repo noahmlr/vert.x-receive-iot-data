@@ -10,6 +10,7 @@ import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
+import io.vertx.mqtt.MqttClientOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import util.SystemUtil;
@@ -97,7 +98,10 @@ public class MainVerticle extends AbstractVerticle {
       .setHost(host)
       .setPort(port);
 
-    vertx.setPeriodic(5000, time -> device.startAndConnectMqttClient(vertx)
+    // Options are used to set client id
+    MqttClientOptions options = new MqttClientOptions().setClientId(clientId);
+
+    vertx.setPeriodic(5000, time -> device.startAndConnectMqttClient(vertx, options)
       .onSuccess(connection -> {
         JsonObject object = device.jsonValue();
         device.getMqttClient().publish(topic, Buffer.buffer(object.toString()), MqttQoS.AT_MOST_ONCE, false, false)
@@ -105,6 +109,18 @@ public class MainVerticle extends AbstractVerticle {
           .onFailure(throwable -> logger.error("Failed to publish message", throwable));
       })
       .onFailure(throwable -> logger.error("Failed to connect to MQTT")));
+
+    testSubscription(device, topic, options);
+  }
+
+  private void testSubscription(MqttDevice device, String topic, MqttClientOptions options) {
+    device.startAndConnectMqttClient(vertx, options)
+      .onSuccess(connection -> {
+        device.getMqttClient()
+          .publishHandler(s -> {
+            logger.info("Received Message {}", s.payload().toString());
+          }).subscribe(topic, 0);
+      });
   }
 
 }

@@ -25,18 +25,20 @@ public class PublishHandler {
 
   public static Handler<MqttPublishMessage> handler(MqttEndpoint mqttEndpoint) {
     return mqttPublishMessage -> {
-      MongoStore.getMongoClient().save("devices", createMongoDocument(mqttPublishMessage.payload().toJsonObject(), mqttPublishMessage.topicName()))
+      JsonObject mongoDocument = createMongoDocument(mqttPublishMessage.payload().toJsonObject(), mqttPublishMessage.topicName());
+      MongoStore.getMongoClient().save("devices", mongoDocument)
         .onSuccess(id -> {
           logger.info("Successfully saved object to MongoDB with id: {}", id);
           Store.getMqttSubscriptions().forEach((clientId, subscription) -> {
             if (subscription.getTopic().equals(mqttPublishMessage.topicName())) {
               subscription.getMqttEndpoint()
                 .publish(mqttPublishMessage.topicName(),
-                  mqttPublishMessage.payload(),
+                  mongoDocument.toBuffer(),
                   MqttQoS.AT_MOST_ONCE,
                   false,
                   false)
-                .onSuccess(pid -> logger.info("Successfully published to subscription {}", clientId));
+                .onSuccess(pid -> logger.info("Successfully published to subscription {}", clientId))
+                .onFailure(throwable -> logger.error("Failed to publish to subscription {}", clientId, throwable));
             }
           });
 
