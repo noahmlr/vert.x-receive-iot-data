@@ -5,9 +5,11 @@ import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.json.JsonObject;
+import io.vertx.core.net.PemKeyCertOptions;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.client.WebClient;
+import io.vertx.mqtt.MqttClientOptions;
 import io.vertx.servicediscovery.Record;
 import io.vertx.servicediscovery.ServiceDiscovery;
 import io.vertx.servicediscovery.ServiceReference;
@@ -70,7 +72,19 @@ public class MainVerticle extends AbstractVerticle {
           });
       });
 
-    vertx.setPeriodic(5000, id -> mqttManager.startAndConnectMqttClient(vertx)
+    String mqttKey = Optional.ofNullable(System.getProperty("MQTT_KEY")).orElse("things.home.smart.key");
+    String mqttCert = Optional.ofNullable(System.getProperty("MQTT_CERT")).orElse("things.home.smart.crt");
+    String mqttClientId = Optional.ofNullable(System.getenv("MQTT_CLIENT_ID")).orElse("gateway");
+    boolean mqttSSL = Boolean.parseBoolean(Optional.ofNullable(System.getProperty("MQTT_SSL")).orElse("false"));
+    MqttClientOptions clientOptions = new MqttClientOptions()
+      .setClientId(mqttClientId)
+      .setKeyCertOptions(new PemKeyCertOptions()
+        .setKeyPath(mqttKey)
+        .setCertPath(mqttCert))
+      .setSsl(mqttSSL);
+
+
+    vertx.setPeriodic(5000, id -> mqttManager.startAndConnectMqttClient(vertx, clientOptions)
       .onSuccess(mqttConnect ->
         serviceDiscovery.getRecords(new JsonObject().put("type", "http-endpoint"))
           .onSuccess(this::publishDeviceData)

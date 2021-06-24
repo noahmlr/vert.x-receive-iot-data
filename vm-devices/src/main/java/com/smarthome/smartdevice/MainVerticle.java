@@ -9,6 +9,7 @@ import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.JsonObject;
+import io.vertx.core.net.PemKeyCertOptions;
 import io.vertx.ext.web.Router;
 import io.vertx.mqtt.MqttClientOptions;
 import org.slf4j.Logger;
@@ -47,7 +48,8 @@ public class MainVerticle extends AbstractVerticle {
 
     HttpDevice httpDevice = new HttpDevice(id, deviceLocation);
 
-    httpDevice.createRegisterToGatewayRequest(vertx, "localhost", 9090, false, gatewayToken)
+    int gatewayPort = Integer.parseInt(SystemUtil.getProperty("GATEWAY_PORT", "9090"));
+    httpDevice.createRegisterToGatewayRequest(vertx, "localhost", gatewayPort, false, gatewayToken)
       .sendJsonObject(new JsonObject()
         .put("id", id)
         .put("host", hostName)
@@ -94,12 +96,20 @@ public class MainVerticle extends AbstractVerticle {
     int port = Integer.parseInt(SystemUtil.getProperty("MQTT_PORT", "1883"));
     String host = SystemUtil.getProperty("MQTT_HOST", "mqtt.home.smart");
     String topic = SystemUtil.getProperty("MQTT_TOPIC", "house");
+    boolean mqttSSL = Boolean.parseBoolean(Optional.ofNullable(System.getProperty("MQTT_SSL")).orElse("false"));
     MqttDevice device = new MqttDevice(id, deviceLocation)
       .setHost(host)
       .setPort(port);
 
+    String mqttKey = Optional.ofNullable(System.getProperty("MQTT_KEY")).orElse("things.home.smart.key");
+    String mqttCert = Optional.ofNullable(System.getProperty("MQTT_CERT")).orElse("things.home.smart.crt");
     // Options are used to set client id
-    MqttClientOptions options = new MqttClientOptions().setClientId(clientId);
+    MqttClientOptions options = new MqttClientOptions()
+      .setClientId(clientId)
+      .setKeyCertOptions(new PemKeyCertOptions()
+        .setKeyPath(mqttKey)
+        .setCertPath(mqttCert))
+      .setSsl(mqttSSL);
 
     vertx.setPeriodic(5000, time -> device.startAndConnectMqttClient(vertx, options)
       .onSuccess(connection -> {

@@ -30,14 +30,14 @@ public class MqttManager {
   }
 
   // create and connect the MQTT client "in" a Circuit Breaker
-  public Future<MqttConnAckMessage> startAndConnectMqttClient(Vertx vertx) {
+  public Future<MqttConnAckMessage> startAndConnectMqttClient(Vertx vertx, MqttClientOptions options) {
 
     var mqttPort = Integer.parseInt(Optional.ofNullable(System.getenv("MQTT_PORT")).orElse("1883"));
-    var mqttHost = Optional.ofNullable(System.getenv("MQTT_HOST")).orElse("mqtt.home.smart");
+    var mqttHost = Optional.ofNullable(System.getenv("MQTT_HOST")).orElse("localhost");
 
     return getBreaker(vertx).execute(promise -> {
 
-      mqttClient = MqttClient.create(vertx);
+      mqttClient = MqttClient.create(vertx, options);
 
       mqttClient.connect(mqttPort, mqttHost, ar -> {
         if (ar.succeeded()) {
@@ -52,8 +52,8 @@ public class MqttManager {
   }
 
   public Future<Integer> publish(JsonObject object) {
-    var mqttClientId = Optional.ofNullable(System.getenv("MQTT_CLIENT_ID")).orElse("gateway");
-    return this.mqttClient.publish(mqttClientId, Buffer.buffer(object.toString()), MqttQoS.AT_LEAST_ONCE, false, false);
+    var mqttTopic = Optional.ofNullable(System.getenv("MQTT_TOPIC")).orElse("house");
+    return this.mqttClient.publish(mqttTopic, Buffer.buffer(object.toString()), MqttQoS.AT_LEAST_ONCE, false, false);
   }
 }
 
