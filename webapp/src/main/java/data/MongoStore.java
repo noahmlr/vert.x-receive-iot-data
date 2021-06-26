@@ -15,11 +15,13 @@ public class MongoStore {
   public static void initialize(Vertx vertx, String connectionString, String dataBaseName) {
     mongoClient = MongoClient.create(vertx, new JsonObject()
       .put("db_name", dataBaseName)
+      .put("useObjectId", false)
       .put("connection_string", connectionString));
   }
 
   public static Flowable<JsonObject> getLastDevicesMetricsFlowable(Integer howMany) {
-    ReadStream<JsonObject> devices = mongoClient.findBatchWithOptions("devices", new JsonObject(), new FindOptions().setLimit(howMany));
+    ReadStream<JsonObject> devices = mongoClient.findBatchWithOptions("devices", new JsonObject(), new FindOptions().setLimit(howMany)
+      .setSort(new JsonObject().put("_id", -1)));
 
     return devices.toFlowable();
   }
