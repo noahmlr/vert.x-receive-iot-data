@@ -1,9 +1,11 @@
 package com.smarthome.webapp;
 
 import data.AdminUser;
+import data.MongoStore;
 import io.reactivex.Completable;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpMethod;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.auth.JWTOptions;
 import io.vertx.ext.auth.PubSecKeyOptions;
@@ -35,10 +37,17 @@ public class MainVerticle extends AbstractVerticle {
 
   @Override
   public Completable rxStart() {
+    String mongoHost = Optional.ofNullable(System.getProperty("MONGO_HOST")).orElse("localhost");
+    int mongoPort = Integer.parseInt(Optional.ofNullable(System.getProperty("MONGO_HOST")).orElse("27017"));
+    String mongoBaseName = Optional.ofNullable(System.getProperty("MONGO_BASE_NAME")).orElse("smarthome_db");
     AdminUser user = new AdminUser("root", "admin");
     int httpPort = Integer.parseInt(Optional.ofNullable(System.getProperty("HTTP_PORT")).orElse("8080"));
 
+    String connectionString = String.format("mongodb://%s:%d", mongoHost, mongoPort);
+
     Router router = Router.router(vertx);
+
+    MongoStore.initialize(vertx, connectionString, mongoBaseName);
 
     /* These buffers aren't working
     Buffer privateKeyBuffer = Buffer.buffer();
@@ -104,12 +113,9 @@ public class MainVerticle extends AbstractVerticle {
     router.route(HttpMethod.GET, "/say-hello")
       .handler(jwtHandler)
       .handler(routingContext -> {
-        JsonObject principal = routingContext.user().principal();
-        System.out.println(principal);
-        JsonObject response = new JsonObject()
-          .put("subject", principal.getString("sub"))
-          .put("greetingMessage", principal.getString("greetingMessage"));
-        routingContext.response().setStatusCode(200).end(response.toString());
+          MongoStore.getLastDevicesMetricsFlowable(10)
+            .collectInto(new JsonArray(), JsonArray::add)
+            .subscribe(jsonArray -> routingContext.response().setStatusCode(200).end(jsonArray.toString()), throwable -> routingContext.response().setStatusCode(500).end());
       });
 
     router.route(HttpMethod.GET, "/disconnect")
